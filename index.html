@@ -207,7 +207,7 @@
   }
   .discount-row {
   display: flex;
-  justify-content: space;
+  justify-content: space-between;
   color: #00b894;
   font-size:14px;
   font-weight: 600;
@@ -642,6 +642,7 @@
 .admin-item img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; }
 
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -660,7 +661,6 @@
     <li><a data-page="wishlist" onclick="showPage('wishlist')">❤️ Wishlist (<span id="wishCount">0</span>)</a></li>
     <li><a data-page="about" onclick="showPage('about')">About</a></li>
     <li><a data-page="contact" onclick="showPage('contact')">Contact</a></li>
-    <li><a data-page="admin" onclick="showPage('admin')">🛠️ Admin</a></li>
   </ul>
   <div class="nav-actions">
     <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
@@ -827,7 +827,26 @@
     <h2 class="section-title">
       Admin Panel 🛠️
     </h2>
-    <div class="admin-grid">
+
+    <!-- 🟢 1. TAMBAHKAN DI SINI: Form Login Admin -->
+    <div id="loginBox" class="contact-form" style="max-width:400px; margin:0 auto 40px;">
+      <h3 style="margin-bottom:16px;">Login Admin 🔐</h3>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="admin@nova.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="••••••••">
+      </div>
+      <button class="submit-btn" onclick="adminLogin()">Login →</button>
+    </div>
+
+    <!-- 🟢 LANGKAH 3: DASHBOARD STATISTIK (Bawaan Anda) -->
+    <div class="stats-grid" id="dashStats" style="display:none;"></div>
+
+    <!-- 🟢 2. UBAH DI SINI: Tambah id="adminPanel" dan style="display:none;" pada admin-grid -->
+    <div class="admin-grid" id="adminPanel" style="display:none;">
       <div class="admin-form">
         <h3 id="formTitle">
           Add New Product
@@ -848,8 +867,7 @@
             <option>Home</option>
           </select>
         </div>
-        
-        <!-- 🛠️ SELESAI DIPERBAIKI: Tanda kutip pada id="imgClearBtn" sudah ditutup dengan benar -->
+
         <div class="form-group">
           <label>Product Image</label>
           <label class="img-upload">
@@ -859,7 +877,7 @@
           </label>
           <button type="button" class="img-clear" id="imgClearBtn" onclick="clearImage()">Remove image</button>
         </div>
-        
+
         <div class="form-group">
           <label>Background color</label>
           <input type="color" id="aBg" value="#e8eaf6">
@@ -881,6 +899,18 @@
       </div>
       <div class="admin-list" id="adminList"></div>
     </div>
+
+    <!-- 🟢 LANGKAH 4: RIWAYAT PESANAN (Bawaan Anda) -->
+    <div class="admin-form" style="margin-top:40px;">
+      <h3>📋 Riwayat Pesanan</h3>
+      <div id="orderList"></div>
+    </div>
+
+    <!-- 🟢 3. TAMBAHKAN DI SINI: Tombol Logout sebelum penutup </section> -->
+    <div style="text-align:center; margin-top:30px;">
+      <button class="cancel-btn" id="logoutBtn" style="display:none; width:auto; padding:10px 30px;" onclick="adminLogout()">Logout 🚪</button>
+    </div>
+
   </section>
 </div>
 
@@ -911,35 +941,40 @@
 <footer>© 2025 NOVA Store — Built with ❤️</footer>
 
 <script>
+  /* ===== HIDDEN ADMIN ACCESS ===== */
+const ADMIN_HASH = "#admin-nova2025";   // 🔑 ganti dengan rahasia kamu!
+
+function checkAdminAccess() {
+  if (location.hash === ADMIN_HASH) {
+    showPage("admin");
+    // bersihkan hash agar tidak kelihatan di URL
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
+window.addEventListener("hashchange", checkAdminAccess);
+
+  /* ===== KONEKSI SUPABASE ===== */
+const SUPA_URL  = "https://mzjeorxdpmrhdzrhaekf.supabase.co";
+const SUPA_KEY  = "sb_publishable_ZIJhXi4aFnAmdyMYPXg7Yg_rVp92tnh";
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
 /* ===== STATE ===== */
 var cart = [];
 var wishlist = new Set();
-var customProducts = [];
 var editingId = null;
-
-var products = [
-  { id: 1, name: "Wireless Headphones", desc: "Noise cancelling · 40h battery", price: 129.99, emoji: "🎧", bg: "#e8eaf6", cat: "Electronics", rating: 4.8 },
-  { id: 2, name: "Smart Watch", desc: "Fitness tracking · Waterproof", price: 199.99, emoji: "⌚", bg: "#fce4ec", cat: "Electronics", rating: 4.5 },
-  { id: 3, name: "Sneakers Pro", desc: "Ultra-light running shoes", price: 89.99, emoji: "👟", bg: "#e0f2f1", cat: "Fashion", rating: 4.2 },
-  { id: 4, name: "Sunglasses", desc: "UV400 polarized lenses", price: 59.99, emoji: "🕶️", bg: "#fff3e0", cat: "Fashion", rating: 3.9 },
-  { id: 5, name: "Backpack", desc: "Water-resistant · 25L", price: 74.99, emoji: "🎒", bg: "#ede7f6", cat: "Fashion", rating: 4.6 },
-  { id: 6, name: "Camera", desc: "4K video · 24MP sensor", price: 449.99, emoji: "📷", bg: "#e3f2fd", cat: "Electronics", rating: 5.0 },
-  { id: 7, name: "Coffee Maker", desc: "Espresso · Auto-brew", price: 99.99, emoji: "☕", bg: "#fbe9e7", cat: "Home", rating: 4.1 },
-  { id: 8, name: "Desk Lamp", desc: "LED · Touch dimmer", price: 39.99, emoji: "💡", bg: "#fffde7", cat: "Home", rating: 4.4 },
-];
+var products = [];
 
 var categories = ["All"];
 let activeCategory = "All";
 
-/* ===== PRODUCT STORAGE ===== */
-function loadProducts() {
-  try {
-    const saved = localStorage.getItem("nova_products");
-    if (saved) customProducts = JSON.parse(saved) || [];
-  } catch (e) { customProducts = []; }
-}
-function persistProducts() {
-  localStorage.setItem("nova_products", JSON.stringify(customProducts));
+/* ===== PRODUK DARI SUPABASE ===== */
+async function loadProducts() {
+  const { data, error } = await supa
+    .from("products")
+    .select("*");
+  if (error) { console.error(error); toast("Gagal memuat produk!", "⚠️"); return; }
+  products = data;
+  rebuildCatalog();
 }
 
 /* ===== LOCALSTORAGE ===== */
@@ -952,7 +987,6 @@ function load() {
   try {
     cart = JSON.parse(localStorage.getItem("nova_cart")) || [];
     wishlist = new Set(JSON.parse(localStorage.getItem("nova_wishlist")) || []);
-   Products();
     if (localStorage.getItem("nova_theme") === "dark") {
       document.body.classList.add("dark-mode");
       document.getElementById("themeBtn").textContent = "☀️";
@@ -982,7 +1016,13 @@ function showPage(name) {
   });
   window.scrollTo({ top: 0 });
   if (name === "wishlist") renderWishlist();
-  if (name === "admin") renderAdmin();
+  if (name === "admin") {
+    supa.auth.getSession().then(function(res) {
+      adminUser = res.data.session ? res.data.session.user : null;
+      updateAdminUI();
+      renderAdmin();
+    });
+  }
 }
 
 /* ===== THEME ===== */
@@ -1018,20 +1058,21 @@ function cardHTML(p) {
   const wished = wishlist.has(p.id);
   let html = '';
   html += '<div class="card">';
-  html += '<div class="card-img" style="background:' + p.bg + '" onclick="openProduct(' + p.id + ')">';
+  html += '<div class="card-img" style="background:' + p.bg + '" onclick="openProduct(\'' + p.id + '\')">';
   html += p.image
   ? '<img src="' + p.image + '" alt="' + p.name + '">'
   : '<span style="font-size:64px">' + p.emoji + '</span>';
-  html += '<button class="wish-btn ' + (wished ? 'wished' : '') + '" onclick="toggleWish(' + p.id + ')">';
+  html += '<button class="wish-btn ' + (wished ? 'wished' : '') + '" onclick="toggleWish(\'' + p.id + '\')">';
   html += wished ? '❤️' : '🤍';
   html += '</button></div>';
   html += '<div class="card-body">';
   html += '<h3>' + p.name + '</h3>';
   html += '<div class="star-rating">' + starsHTML(p.rating) + '</div>';
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Terjual ' + (p.sold || 0) + '</div>';
   html += '<p>' + p.desc + '</p>';
   html += '<div class="price-row">';
   html += '<span class="price">$' + p.price.toFixed(2) + '</span>';
-  html += '<button class="add-btn" onclick="addToCart(' + p.id + ')">Add +</button>';
+  html += '<button class="add-btn" onclick="addToCart(\'' + p.id + '\')">Add +</button>';
   html += '</div></div></div>';
   return html;
 }
@@ -1112,7 +1153,14 @@ function renderProducts() {
 
 /* ===== HOME TRENDING ===== */
 function renderHome() {
-  document.getElementById("homeGrid").innerHTML = products.slice(0, 4).map(cardHTML).join("");
+  const trending = products.slice().sort(function(a, b) {
+    const scoreA = (a.rating || 0) + Math.log10((a.sold || 0) + 1) * 2;
+    const scoreB = (b.rating || 0) + Math.log10((b.sold || 0) + 1) * 2;
+    return scoreB - scoreA;
+  }).slice(0, 4);
+
+  document.getElementById("homeGrid").innerHTML = trending.map(cardHTML).join("");
+  observeReveals();
 }
 
 /* ===== WISHLIST ===== */
@@ -1237,11 +1285,11 @@ html += img
   : '<span class="emoji">' + i.emoji + '</span>';
       html += '<div style="flex:1"><strong>' + i.name + '</strong><br><small>$' + i.price.toFixed(2) + '</small></div>';
       html += '<div class="qty-controls">';
-      html += '<button onclick="changeQty(' + i.id + ',-1)">−</button>';
+      html += '<button onclick="changeQty(\'' + i.id + '\',-1)">−</button>';
       html += '<span>' + i.qty + '</span>';
-      html += '<button onclick="changeQty(' + i.id + ',1)">+</button>';
+      html += '<button onclick="changeQty(\'' + i.id + '\',1)">+</button>';
       html += '</div>';
-      html += '<button class="remove-btn" onclick="removeFromCart(' + i.id + ')">🗑️</button>';
+      html += '<button class="remove-btn" onclick="removeFromCart(\'' + i.id + '\')">🗑️</button>';
       html += '</div>';
     });
   }
@@ -1249,19 +1297,48 @@ html += img
 }
 
 /* ===== CHECKOUT ===== */
-function checkout() {
+async function checkout() {
   if (cart.length === 0) { toast("Your cart is empty!", "⚠️"); return; }
   toggleCart(false);
+
+  const total = cart.reduce(function(s, i) { return s + i.qty * i.price; }, 0);
+  const finalTotal = activePromo ? total * (1 - activePromo.percent / 100) : total;
+  const items = cart.map(function(i) { return { id: i.id, qty: i.qty }; });
+
+  // 🟢 Kirim pesanan lewat fungsi database yang aman
+  const { error } = await supa.rpc("place_order", {
+    p_name: "Guest",
+    p_items: items,
+    p_total: finalTotal,
+    p_promo: activePromo ? activePromo.code : null
+  });
+
+  if (error) {
+    console.error(error);
+    toast("Checkout gagal! Coba lagi", "⚠️");
+    return; // jangan kosongkan cart kalau gagal
+  }
+
+  // update tampilan lokal
+  items.forEach(function(i) {
+    const prod = products.find(function(p) { return p.id === i.id; });
+    if (prod) prod.sold = (prod.sold || 0) + i.qty;
+  });
+
   document.getElementById("successTitle").textContent = "Order Placed!";
   let msg = "Thanks for shopping with NOVA. Your order is on its way!";
   if (activePromo) msg = "Promo " + activePromo.code + " applied! Your order is on its way!";
   document.getElementById("successText").textContent = msg;
   document.getElementById("successModal").classList.add("active");
+
   cart = [];
   activePromo = null;
   renderCart();
+  renderHome();
   save();
 }
+
+
 function closeSuccess() {
   document.getElementById("successModal").classList.remove("active");
 }
@@ -1368,89 +1445,106 @@ function clearImage() {
 /* ===== ADMIN PANEL ===== */
 function renderAdmin() {
   const list = document.getElementById("adminList");
+  if (!list) return;
   let html = "";
   products.forEach(function(p) {
     html += '<div class="admin-item">';
     html += p.image
-  ? '<img src="' + p.image + '" alt="">'
-  : '<span class="emoji">' + p.emoji + '</span>';
+      ? '<img src="' + p.image + '" alt="" style="width:46px; height:46px; border-radius:10px; object-fit:cover; margin-right:10px;">'
+      : '<span class="emoji">' + p.emoji + '</span>';
+      
     html += '<div class="info"><strong>' + p.name + '</strong>' +
       '<small>$' + p.price.toFixed(2) + ' · ' + p.cat + '</small></div>';
-    if (p.custom) {
-      html += '<button class="a-edit" onclick="editProduct(' + p.id + ')">Edit</button>';
-      html += '<button class="a-del" onclick="deleteProduct(' + p.id + ')">Delete</button>';
-    } else {
-      html += '<small style="color:var(--muted)">built-in</small>';
-    }
+      
+    html += '<button class="a-edit" onclick="editProduct(\'' + p.id + '\')">Edit</button>';
+    html += '<button class="a-del" onclick="deleteProduct(\'' + p.id + '\')">Delete</button>';
     html += '</div>';
   });
   list.innerHTML = html;
 }
 
-function saveProduct() {
-  const name = document.getElementById("aName").value.trim();
+async function saveProduct() {
+  const name  = document.getElementById("aName").value.trim();
   const price = parseFloat(document.getElementById("aPrice").value);
-  const cat = document.getElementById("aCat").value;
-  const emoji = "📦";                      // ✅ keep this
-  const bg = document.getElementById("aBg").value;
-  const desc = document.getElementById("aDesc").value.trim() || "No description";
+  const cat   = document.getElementById("aCat").value;
+  const bg    = document.getElementById("aBg").value;
+  const desc  = document.getElementById("aDesc").value.trim() || "No description";
   const rating = Math.min(5, Math.max(1, parseFloat(document.getElementById("aRating").value) || 4));
 
-  if (!name || isNaN(price)) {
-    toast("Name and price required!", "✍️");
-    return;
-  }
+  if (!name || isNaN(price)) { toast("Name and price required!", "✍️"); return; }
 
   const data = {
-    name: name,
-    price: price,
-    cat: cat,
-    emoji: emoji,           // ← uses the "📦" from above
-    image: uploadedImage,   // ← your uploaded photo
-    bg: bg,
-    desc: desc,
-    rating: rating
+    name: name, price: price, cat: cat, emoji: "📦",
+    image: uploadedImage, bg: bg, desc: desc, rating: rating
   };
 
   if (editingId) {
-    const idx = customProducts.findIndex(function(x) { return x.id === editingId; });
-    if (idx !== -1) customProducts[idx] = Object.assign({ id: editingId, custom: true }, data);
+    const { error } = await supa.from("products").update(data).eq("id", editingId);
+    if (error) { console.error(error); toast("Gagal mengedit!", "⚠️"); return; }
     toast("Product updated!", "✏️");
   } else {
-    data.id = Date.now();
-    data.custom = true;
-    customProducts.push(data);
+    const { error } = await supa.from("products").insert([data]);
+    if (error) { console.error(error); toast("Gagal menambah produk!", "⚠️"); return; }
     toast("Product added!", "🎉");
   }
-
-  persistProducts();
-  rebuildCatalog();
   resetForm();
-  renderAdmin();
+  await loadProducts();
 }
 
-function editProduct(id) {
-  const p = customProducts.find(function(x) { return x.id === id; });
-  if (!p) return;
+async function editProduct(id) {
+  const { data, error } = await supa.from("products").select("*").eq("id", id).single();
+  
+  if (error || !data) { toast("Produk tidak ditemukan!", "⚠️"); return; }
+  
   editingId = id;
-  document.getElementById("aName").value = p.name;
-  document.getElementById("aPrice").value = p.price;
-  document.getElementById("aCat").value = p.cat;
-  document.getElementById("aBg").value = p.bg;
-  document.getElementById("aDesc").value = p.desc;
-  document.getElementById("aRating").value = p.rating;
-  uploadedImage = p.image || null;
-showImagePreview();
+  document.getElementById("aName").value = data.name;
+  document.getElementById("aPrice").value = data.price;
+  document.getElementById("aCat").value = data.cat;
+  document.getElementById("aBg").value = data.bg;
+  document.getElementById("aDesc").value = data.desc;
+  document.getElementById("aRating").value = data.rating;
+  uploadedImage = data.image || null;
+  showImagePreview();
   document.getElementById("formTitle").textContent = "Edit Product";
   document.getElementById("cancelEdit").style.display = "block";
 }
 
-function deleteProduct(id) {
-  customProducts = customProducts.filter(function(p) { return p.id !== id; });
-  persistProducts();
-  rebuildCatalog();
-  renderAdmin();
+async function deleteProduct(id) {
+  if (!confirm("Yakin hapus produk ini?")) return;
+  const { error } = await supa.from("products").delete().eq("id", id);
+  if (error) { console.error(error); toast("Gagal menghapus!", "⚠️"); return; }
   toast("Product deleted", "🗑️");
+  await loadProducts();
+}
+
+/* ======================================================== */
+/* 👉 🟢 BERHASIL DITEMPELKAN DI SINI (DI BAWAH DELETE)     */
+/* ======================================================== */
+function rebuildCatalog() {
+  categories = ["All"];
+  const set = new Set();
+  products.forEach(function(p) { set.add(p.cat); });
+  set.forEach(function(c) { categories.push(c); });
+  if (categories.indexOf(activeCategory) === -1) activeCategory = "All";
+  renderFilters();
+  renderProducts();
+  renderHome();
+}
+
+async function seedIfEmpty() {
+  const { count } = await supa.from("products").select("*", { count: "exact", head: true });
+  if (count > 0) return;
+  const starter = [
+    { name: "Wireless Headphones", desc: "Noise cancelling · 40h battery", price: 129.99, emoji: "🎧", bg: "#e8eaf6", cat: "Electronics", rating: 4.8 },
+    { name: "Smart Watch", desc: "Fitness tracking · Waterproof", price: 199.99, emoji: "⌚", bg: "#fce4ec", cat: "Electronics", rating: 4.5 },
+    { name: "Sneakers Pro", desc: "Ultra-light running shoes", price: 89.99, emoji: "👟", bg: "#e0f2f1", cat: "Fashion", rating: 4.2 },
+    { name: "Sunglasses", desc: "UV400 polarized lenses", price: 59.99, emoji: "🕶️", bg: "#fff3e0", cat: "Fashion", rating: 3.9 },
+    { name: "Backpack", desc: "Water-resistant · 25L", price: 74.99, emoji: "🎒", bg: "#ede7f6", cat: "Fashion", rating: 4.6 },
+    { name: "Camera", desc: "4K video · 24MP sensor", price: 449.99, emoji: "📷", bg: "#e3f2fd", cat: "Electronics", rating: 5.0 },
+    { name: "Coffee Maker", desc: "Espresso · Auto-brew", price: 99.99, emoji: "☕", bg: "#fbe9e7", cat: "Home", rating: 4.1 },
+    { name: "Desk Lamp", desc: "LED · Touch dimmer", price: 39.99, emoji: "💡", bg: "#fffde7", cat: "Home", rating: 4.4 },
+  ];
+  await supa.from("products").insert(starter);
 }
 
 function resetForm() {
@@ -1464,33 +1558,96 @@ function resetForm() {
   clearImage();
 }
 
-function rebuildCatalog() {
-  const builtin = products.filter(function(p) { return !p.custom; });
-  const merged = customProducts.concat(builtin);
-  products.length = 0;
-  merged.forEach(function(p) { products.push(p); });
+let adminUser = null;
 
-  categories.length = 0;
-  const set = new Set();
-  products.forEach(function(p) { set.add(p.cat); });
-  categories.push("All");
-  set.forEach(function(c) { categories.push(c); });
+async function adminLogin() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass  = document.getElementById("loginPass").value;
+  if (!email || !pass) { toast("Isi email & password!", "✍️"); return; }
 
-  if (categories.indexOf(activeCategory) === -1) activeCategory = "All";
-  renderFilters();
-  renderProducts();
-  renderHome();
+  const { data, error } = await supa.auth.signInWithPassword({
+    email: email, password: pass
+  });
+
+  if (error) { toast("Login gagal! Cek email/password", "❌"); return; }
+  adminUser = data.user;
+  toast("Selamat datang, Admin! 👑");
+  updateAdminUI();
+}
+
+async function adminLogout() {
+  await supa.auth.signOut();
+  adminUser = null;
+  toast("Logged out", "🚪");
+  updateAdminUI();
+}
+
+function updateAdminUI() {
+  const logged = !!adminUser;
+  document.getElementById("loginBox").style.display   = logged ? "none"  : "block";
+  document.getElementById("adminPanel").style.display = logged ? "grid"  : "none";
+  document.getElementById("logoutBtn").style.display  = logged ? "inline-block" : "none";
+
+  if (logged) {
+    renderDashboard();   // 🟢 muat statistik
+    renderOrders();      // 🟢 muat riwayat pesanan
+  }
+}
+
+/* ===== DASHBOARD STATISTIK ===== */
+async function renderDashboard() {
+  const { data: orders, error } = await supa
+    .from("orders").select("*").order("created_at", { ascending: false });
+
+  const el = document.getElementById("dashStats");
+  if (!el) return;
+  if (error || !orders) { el.style.display = "none"; return; }
+
+  const revenue   = orders.reduce(function(s, o) { return s + Number(o.total); }, 0);
+  const totalSold = products.reduce(function(s, p) { return s + (p.sold || 0); }, 0);
+  const best = products.slice().sort(function(a, b) { return (b.sold || 0) - (a.sold || 0); })[0];
+
+  el.style.display = "grid";
+  el.innerHTML =
+    '<div class="stat-box"><div class="num">' + orders.length + '</div><div class="lbl">📦 Total Pesanan</div></div>' +
+    '<div class="stat-box"><div class="num">$' + revenue.toFixed(2) + '</div><div class="lbl">💰 Total Revenue</div></div>' +
+    '<div class="stat-box"><div class="num">' + totalSold + '</div><div class="lbl">🔥 Total Terjual</div></div>' +
+    '<div class="stat-box"><div class="num" style="font-size:18px; padding-top:8px;">' + (best ? best.name : "-") + '</div><div class="lbl">🏆 Produk Terlaris</div></div>';
+}
+
+/* ===== RIWAYAT PESANAN ===== */
+async function renderOrders() {
+  const { data: orders } = await supa
+    .from("orders").select("*").order("created_at", { ascending: false }).limit(50);
+
+  const el = document.getElementById("orderList");
+  if (!el) return;
+  if (!orders || !orders.length) {
+    el.innerHTML = '<p style="color:var(--muted); text-align:center;">Belum ada pesanan 😴</p>';
+    return;
+  }
+
+  let html = "";
+  orders.forEach(function(o) {
+    const date = new Date(o.created_at).toLocaleString("id-ID");
+    html += '<div class="admin-item" style="flex-wrap:wrap;">';
+    html += '<div class="info"><strong>' + o.customer_name + ' — $' + Number(o.total).toFixed(2) + '</strong>';
+    html += '<small>' + date + (o.promo_code ? ' · 🎟️ ' + o.promo_code : '') + '</small></div>';
+    html += '</div>';
+  });
+  el.innerHTML = html;
 }
 
 /* ===== INIT ===== */
 load();
-rebuildCatalog();
-renderProducts();
-renderHome();
 renderCart();
-renderAdmin();
 document.getElementById("wishCount").textContent = wishlist.size;
-observeReveals();
+
+(async function init() {
+  checkAdminAccess();      // 🟢 cek pintu rahasia
+  await seedIfEmpty();
+  await loadProducts();
+})();
 </script>
 </body>
 </html>
